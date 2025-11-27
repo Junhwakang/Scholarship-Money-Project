@@ -1,59 +1,54 @@
-'use client'
-import { motion } from 'framer-motion'
-import RotatingWords from './RotatingWords'
+"use client";
 
+import Image from "next/image";
 
 export default function Hero() {
-return (
-<section id="hero" className="min-h-[100svh] flex items-center relative overflow-hidden">
-<div className="container-max">
-<motion.h1
-initial={{ opacity: 0, y: 12 }}
-animate={{ opacity: 1, y: 0 }}
-transition={{ duration: 0.6 }}
-className="text-5xl md:text-7xl font-extrabold leading-tight"
->
-대학생을 위한 <br className="hidden md:block" />
-<span className="text-lemon-300">
-<RotatingWords words={["장학금", "파트타임", "연구참여", "인턴십"]} />
-</span>
-</motion.h1>
+  return (
+    <div className="relative h-screen">
+      {/* 배경 이미지 */}
+      <div className="absolute inset-0">
+        <Image
+          src="https://images.unsplash.com/photo-1752920299210-0b727800ea50?w=1920"
+          alt="Hero background"
+          fill
+          className="object-cover"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/30 to-black/60"></div>
+      </div>
 
+      {/* 콘텐츠 */}
+      <div className="relative h-full flex items-center justify-center text-center px-6">
+        <div className="max-w-4xl">
+          <h1 className="text-5xl md:text-6xl lg:text-7xl font-light text-white mb-6 tracking-tight">
+            Opportunity Driven<br />Success
+          </h1>
+          <p className="text-white/90 text-xl font-light tracking-wide mb-8">
+            모든 기회의 시작, 채용과 장학금
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <a 
+              href="/jobs" 
+              className="px-8 py-4 bg-white text-gray-900 hover:bg-gray-100 transition-colors text-sm font-medium tracking-wide"
+            >
+              채용 찾기
+            </a>
+            <a 
+              href="/scholarship" 
+              className="px-8 py-4 bg-transparent text-white border border-white hover:bg-white hover:text-gray-900 transition-colors text-sm font-medium tracking-wide"
+            >
+              장학금 보기
+            </a>
+          </div>
+        </div>
+      </div>
 
-<motion.p
-initial={{ opacity: 0, y: 8 }}
-animate={{ opacity: 1, y: 0 }}
-transition={{ duration: 0.6, delay: 0.1 }}
-className="mt-6 text-lg text-gray-700 max-w-2xl"
->
-학년·전공·위치·관심에 맞춰 기회를 추천합니다. 투명한 후기와 함께 공정한 정보 생태계를 경험하세요.
-</motion.p>
-
-
-<motion.div
-initial={{ opacity: 0, y: 8 }}
-animate={{ opacity: 1, y: 0 }}
-transition={{ duration: 0.6, delay: 0.2 }}
-className="mt-10 flex flex-wrap items-center gap-3"
->
-<a href="#start" className="btn-primary">지금 맞춤 추천 받기</a>
-<a href="#feed" className="btn-secondary">장학금만 보기</a>
-<a href="#feed" className="btn-secondary">알바만 보기</a>
-</motion.div>
-</div>
-
-
-{/* Subtle gradient blob */}
-<motion.div
-aria-hidden
-className="pointer-events-none absolute -top-20 -right-24 h-[40rem] w-[40rem] rounded-full"
-initial={{ opacity: 0 }}
-animate={{ opacity: 0.35 }}
-transition={{ duration: 1.2 }}
-style={{
-background: 'radial-gradient(circle, #FDE68A 0%, rgba(253,230,138,0.25) 40%, rgba(253,230,138,0) 70%)'
-}}
-/>
-</section>
-)
+      {/* 스크롤 인디케이터 */}
+      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2">
+        <div className="w-6 h-10 border-2 border-white/50 rounded-full flex items-start justify-center p-2">
+          <div className="w-1.5 h-3 bg-white/50 rounded-full animate-bounce"></div>
+        </div>
+      </div>
+    </div>
+  );
 }
