@@ -1,69 +1,95 @@
-import { WorknetApiParams, WorknetApiResponse, WorknetJob } from '@/types/worknet';
-import { XMLParser } from 'fast-xml-parser';
+import { WorknetApiParams, WorknetJob } from '@/types/worknet';
 
-// 워크넷 채용정보 API 호출 함수
+// 워크넷 채용정보 API 호출 함수 (Next.js API Route 사용)
 export async function fetchWorknetJobs(params: Partial<WorknetApiParams> = {}): Promise<{
   jobs: WorknetJob[];
   totalCount: number;
 }> {
-  const apiKey = process.env.NEXT_PUBLIC_WORKNET_API_KEY || '682e2bb1-b106-43ef-bcb7-45367d32f8bb';
-  
-  // 기본 파라미터
-  const defaultParams: WorknetApiParams = {
-    authKey: apiKey,
-    callTp: 'L',
-    returnType: 'xml',
-    startPage: params.startPage || 1,
-    display: params.display || 10,
-    sortOrderBy: 'DESC',
-    ...params,
-  };
-
-  // URL 파라미터 생성
-  const queryParams = new URLSearchParams();
-  Object.entries(defaultParams).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      queryParams.append(key, String(value));
-    }
-  });
-
-  const apiUrl = `https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo210L01.do?${queryParams.toString()}`;
-
   try {
+    // Next.js API Route로 요청
+    const queryParams = new URLSearchParams();
+    
+    queryParams.append('startPage', String(params.startPage || 1));
+    queryParams.append('display', String(params.display || 10));
+    
+    if (params.keyword) queryParams.append('keyword', params.keyword);
+    if (params.region) queryParams.append('region', params.region);
+    if (params.career) queryParams.append('career', params.career);
+    if (params.salTp) queryParams.append('salTp', params.salTp);
+
+    const apiUrl = `/api/worknet?${queryParams.toString()}`;
+    
+    console.log('API Route 호출:', apiUrl);
+
     const response = await fetch(apiUrl, {
       method: 'GET',
     });
 
     if (!response.ok) {
-      throw new Error(`API 요청 실패: ${response.status}`);
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'API 호출 실패');
     }
 
-    const xmlData = await response.text();
+    const xmlText = await response.text();
     
     // XML 파싱
-    const parser = new XMLParser({
-      ignoreAttributes: false,
-      parseTagValue: true,
-    });
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
     
-    const result = parser.parse(xmlData);
-    
-    // 데이터 추출
-    if (result.wantedRoot) {
-      const wantedData = result.wantedRoot.wanted;
-      const jobs = Array.isArray(wantedData) ? wantedData : wantedData ? [wantedData] : [];
-      const totalCount = result.wantedRoot.total || 0;
-      
-      return {
-        jobs,
-        totalCount
-      };
+    // 파싱 에러 체크
+    const parseError = xmlDoc.querySelector('parsererror');
+    if (parseError) {
+      console.error('XML 파싱 에러:', parseError.textContent);
+      throw new Error('XML 파싱 실패');
     }
 
+    // total 추출
+    const totalElement = xmlDoc.querySelector('total');
+    const totalCount = totalElement ? parseInt(totalElement.textContent || '0') : 0;
+
+    // wanted 노드들 추출
+    const wantedNodes = xmlDoc.querySelectorAll('wanted');
+    const jobs: WorknetJob[] = [];
+
+    wantedNodes.forEach(node => {
+      const job: WorknetJob = {
+        wantedAuthNo: node.querySelector('wantedAuthNo')?.textContent || '',
+        company: node.querySelector('company')?.textContent || '',
+        busino: node.querySelector('busino')?.textContent || '',
+        indTpNm: node.querySelector('indTpNm')?.textContent || '',
+        title: node.querySelector('title')?.textContent || '',
+        salTpNm: node.querySelector('salTpNm')?.textContent || '',
+        sal: node.querySelector('sal')?.textContent || '',
+        minSal: node.querySelector('minSal')?.textContent || '',
+        maxSal: node.querySelector('maxSal')?.textContent || '',
+        region: node.querySelector('region')?.textContent || '',
+        holidayTpNm: node.querySelector('holidayTpNm')?.textContent || '',
+        minEdubg: node.querySelector('minEdubg')?.textContent || '',
+        maxEdubg: node.querySelector('maxEdubg')?.textContent || '',
+        career: node.querySelector('career')?.textContent || '',
+        regDt: node.querySelector('regDt')?.textContent || '',
+        closeDt: node.querySelector('closeDt')?.textContent || '',
+        infoSvc: node.querySelector('infoSvc')?.textContent || '',
+        wantedInfoUrl: node.querySelector('wantedInfoUrl')?.textContent || '',
+        wantedMobileInfoUrl: node.querySelector('wantedMobileInfoUrl')?.textContent || '',
+        zipCd: node.querySelector('zipCd')?.textContent || '',
+        strtnmCd: node.querySelector('strtnmCd')?.textContent || '',
+        basicAddr: node.querySelector('basicAddr')?.textContent || '',
+        detailAddr: node.querySelector('detailAddr')?.textContent || '',
+        empTpCd: node.querySelector('empTpCd')?.textContent || '',
+        jobsCd: node.querySelector('jobsCd')?.textContent || '',
+        smodifyDtm: node.querySelector('smodifyDtm')?.textContent || '',
+      };
+      jobs.push(job);
+    });
+
+    console.log(`워크넷 데이터 파싱 완료: ${jobs.length}개`);
+
     return {
-      jobs: [],
-      totalCount: 0
+      jobs,
+      totalCount
     };
+
   } catch (error) {
     console.error('워크넷 API 호출 오류:', error);
     return {

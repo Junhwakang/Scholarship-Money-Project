@@ -16,10 +16,12 @@ export default function ScholarshipGrid() {
 
   const loadScholarships = async () => {
     try {
+      console.log('장학금 정보 로딩 시작...');
       const { scholarships: data } = await fetchScholarships({
         numOfRows: 6,
       });
 
+      console.log('받은 장학금 데이터:', data.length, '개');
       setScholarships(data.slice(0, 6));
     } catch (error) {
       console.error("장학금 로딩 오류:", error);
@@ -34,6 +36,7 @@ export default function ScholarshipGrid() {
         <div className="max-w-7xl mx-auto px-6 lg:px-12">
           <div className="text-center py-10">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            <p className="mt-4 text-gray-600">장학금 정보 불러오는 중...</p>
           </div>
         </div>
       </div>
@@ -54,61 +57,61 @@ export default function ScholarshipGrid() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {scholarships.map((scholarship, index) => (
-            <Link
-              key={index}
-              href="/scholarship"
-              className="bg-white p-8 hover:shadow-xl transition-shadow cursor-pointer border border-gray-100"
-            >
-              <div className="text-gray-400 text-xs tracking-[0.2em] mb-4 truncate">
-                {scholarship.instt_nm || scholarship.CTPV_NM || '재단'}
-              </div>
-              
-              <h4 className="text-lg font-light text-gray-900 mb-4 line-clamp-2 min-h-[56px]">
-                {scholarship.UNIV_NM}
-              </h4>
+        {scholarships.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {scholarships.map((scholarship, index) => (
+              <Link
+                key={index}
+                href="/scholarship"
+                className="bg-white p-8 hover:shadow-xl transition-shadow cursor-pointer border border-gray-100"
+              >
+                <div className="text-gray-400 text-xs tracking-[0.2em] mb-4 truncate">
+                  {scholarship.instt_nm || scholarship.CTPV_NM || '재단'}
+                </div>
+                
+                <h4 className="text-lg font-light text-gray-900 mb-4 line-clamp-2 min-h-[56px]">
+                  {scholarship.UNIV_NM}
+                </h4>
 
-              {scholarship.SCHLSHIP_TYPE_SE_NM && (
-                <div className="mb-4">
-                  <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                    {scholarship.SCHLSHIP_TYPE_SE_NM}
+                {scholarship.SCHLSHIP_TYPE_SE_NM && (
+                  <div className="mb-4">
+                    <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                      {scholarship.SCHLSHIP_TYPE_SE_NM}
+                    </span>
+                  </div>
+                )}
+                
+                <div className="space-y-3 mb-6">
+                  {scholarship.SCHLSHIP && (
+                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                      <DollarSign className="w-4 h-4 text-gray-400" />
+                      <span className="font-semibold text-gray-900">{formatAmount(scholarship.SCHLSHIP)}</span>
+                    </div>
+                  )}
+                  {scholarship.CTPV_NM && (
+                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                      <MapPin className="w-4 h-4 text-gray-400" />
+                      <span>{scholarship.CTPV_NM}</span>
+                    </div>
+                  )}
+                  {scholarship.UNIV_SE_NM && (
+                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                      <GraduationCap className="w-4 h-4 text-gray-400" />
+                      <span>{scholarship.UNIV_SE_NM}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-4 border-t border-gray-100">
+                  <span className="inline-flex items-center gap-2 text-sm text-gray-900 hover:gap-4 transition-all">
+                    <span>자세히 보기</span>
+                    <ArrowRight className="w-4 h-4" />
                   </span>
                 </div>
-              )}
-              
-              <div className="space-y-3 mb-6">
-                {scholarship.SCHLSHIP && (
-                  <div className="flex items-center gap-3 text-sm text-gray-600">
-                    <DollarSign className="w-4 h-4 text-gray-400" />
-                    <span className="font-semibold text-gray-900">{formatAmount(scholarship.SCHLSHIP)}</span>
-                  </div>
-                )}
-                {scholarship.CTPV_NM && (
-                  <div className="flex items-center gap-3 text-sm text-gray-600">
-                    <MapPin className="w-4 h-4 text-gray-400" />
-                    <span>{scholarship.CTPV_NM}</span>
-                  </div>
-                )}
-                {scholarship.UNIV_SE_NM && (
-                  <div className="flex items-center gap-3 text-sm text-gray-600">
-                    <GraduationCap className="w-4 h-4 text-gray-400" />
-                    <span>{scholarship.UNIV_SE_NM}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="pt-4 border-t border-gray-100">
-                <span className="inline-flex items-center gap-2 text-sm text-gray-900 hover:gap-4 transition-all">
-                  <span>자세히 보기</span>
-                  <ArrowRight className="w-4 h-4" />
-                </span>
-              </div>
-            </Link>
-          ))}
-        </div>
-
-        {scholarships.length === 0 && !loading && (
+              </Link>
+            ))}
+          </div>
+        ) : (
           <div className="text-center py-10 text-gray-500">
             장학금 정보를 불러올 수 없습니다.
           </div>

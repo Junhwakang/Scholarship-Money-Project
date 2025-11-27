@@ -1,69 +1,147 @@
-import { ScholarshipApiParams, ScholarshipApiResponse, Scholarship } from '@/types/scholarship';
+import { ScholarshipApiParams, Scholarship } from '@/types/scholarship';
 
-// 전국대학별 장학금 API 호출 함수
+// 전국대학별 장학금 API 호출 함수 (Next.js API Route 사용)
 export async function fetchScholarships(params: Partial<ScholarshipApiParams> = {}): Promise<{
   scholarships: Scholarship[];
   totalCount: number;
 }> {
-  const apiKey = process.env.NEXT_PUBLIC_SCHOLARSHIP_API_KEY || '195a040fe3deffc304ac8e3a10c7a72fcf3a2493a4c1e6e27129c15d5f02ec53';
-  
-  // 기본 파라미터
-  const defaultParams: any = {
-    serviceKey: decodeURIComponent(apiKey),
-    pageNo: params.pageNo || 0,
-    numOfRows: params.numOfRows || 100,
-    type: 'json',
-  };
-
-  // 추가 파라미터
-  if (params.UNIV_NM) defaultParams.UNIV_NM = params.UNIV_NM;
-  if (params.CTPV_NM) defaultParams.CTPV_NM = params.CTPV_NM;
-  if (params.UNIV_SE_NM) defaultParams.UNIV_SE_NM = params.UNIV_SE_NM;
-  if (params.SCHLSHIP_TYPE_SE_NM) defaultParams.SCHLSHIP_TYPE_SE_NM = params.SCHLSHIP_TYPE_SE_NM;
-
-  // URL 파라미터 생성
-  const queryParams = new URLSearchParams();
-  Object.entries(defaultParams).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      queryParams.append(key, String(value));
-    }
-  });
-
-  const apiUrl = `https://api.data.go.kr/openapi/tn_pubr_public_univ_schlship_amt_api?${queryParams.toString()}`;
-
   try {
+    // Next.js API Route로 요청
+    const queryParams = new URLSearchParams();
+    
+    queryParams.append('pageNo', String(params.pageNo || 1));
+    queryParams.append('numOfRows', String(params.numOfRows || 100));
+    
+    if (params.UNIV_NM) queryParams.append('UNIV_NM', params.UNIV_NM);
+    if (params.CTPV_NM) queryParams.append('CTPV_NM', params.CTPV_NM);
+    if (params.UNIV_SE_NM) queryParams.append('UNIV_SE_NM', params.UNIV_SE_NM);
+    if (params.SCHLSHIP_TYPE_SE_NM) queryParams.append('SCHLSHIP_TYPE_SE_NM', params.SCHLSHIP_TYPE_SE_NM);
+
+    const apiUrl = `/api/scholarship?${queryParams.toString()}`;
+    
+    console.log('장학금 API Route 호출:', apiUrl);
+
     const response = await fetch(apiUrl, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
     });
 
     if (!response.ok) {
-      console.error(`API 요청 실패: ${response.status}`);
-      return {
-        scholarships: [],
-        totalCount: 0
-      };
+      const errorData = await response.json();
+      console.error('장학금 API 에러:', errorData);
+      throw new Error(errorData.error || 'API 호출 실패');
     }
 
-    const data: ScholarshipApiResponse = await response.json();
-    
-    // 데이터 추출
-    if (data.response?.body?.items && Array.isArray(data.response.body.items)) {
-      const scholarships = data.response.body.items;
-      const totalCount = data.response.body.totalCount || scholarships.length;
+    const contentType = response.headers.get('content-type');
+    console.log('응답 Content-Type:', contentType);
+
+    let scholarships: Scholarship[] = [];
+    let totalCount = 0;
+
+    if (contentType?.includes('application/xml')) {
+      // XML 응답 처리
+      const xmlText = await response.text();
+      console.log('XML 응답 받음:', xmlText.substring(0, 300));
       
-      return {
-        scholarships,
-        totalCount
-      };
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+      
+      const parseError = xmlDoc.querySelector('parsererror');
+      if (parseError) {
+        console.error('XML 파싱 에러:', parseError.textContent);
+        throw new Error('XML 파싱 실패');
+      }
+
+      // totalCount 추출
+      const totalElement = xmlDoc.querySelector('totalCount');
+      totalCount = totalElement ? parseInt(totalElement.textContent || '0') : 0;
+
+      // item 노드들 추출
+      const itemNodes = xmlDoc.querySelectorAll('item');
+      console.log('XML item 개수:', itemNodes.length);
+
+      itemNodes.forEach(node => {
+        const scholarship: Scholarship = {
+          CRTR_YR: node.querySelector('CRTR_YR')?.textContent || '',
+          CTPV_CD: node.querySelector('CTPV_CD')?.textContent || '',
+          CTPV_NM: node.querySelector('CTPV_NM')?.textContent || '',
+          UNIV_NM: node.querySelector('UNIV_NM')?.textContent || '',
+          UNIV_SE_NM: node.querySelector('UNIV_SE_NM')?.textContent || '',
+          SCHLSHIP_TYPE_SE_NM: node.querySelector('SCHLSHIP_TYPE_SE_NM')?.textContent || '',
+          SCHLJO_SE_NM: node.querySelector('SCHLJO_SE_NM')?.textContent || '',
+          SCHLSHIP: node.querySelector('SCHLSHIP')?.textContent || '',
+          CRTR_YMD: node.querySelector('CRTR_YMD')?.textContent || '',
+          instt_code: node.querySelector('instt_code')?.textContent || '',
+          instt_nm: node.querySelector('instt_nm')?.textContent || '',
+        };
+        scholarships.push(scholarship);
+      });
+
+    } else {
+      // JSON 응답 처리
+      const data = await response.json();
+      console.log('=== JSON 응답 전체 ===');
+      console.log(JSON.stringify(data, null, 2));
+      
+      // 다양한 응답 구조 처리
+      if (data.response) {
+        console.log('response 객체 있음');
+        
+        if (data.response.body) {
+          console.log('body 객체 있음');
+          console.log('body 내용:', data.response.body);
+          
+          totalCount = data.response.body.totalCount || 0;
+          console.log('totalCount:', totalCount);
+          
+          if (data.response.body.items) {
+            console.log('items 있음:', typeof data.response.body.items);
+            
+            // items가 배열인 경우
+            if (Array.isArray(data.response.body.items)) {
+              scholarships = data.response.body.items;
+              console.log('items는 배열:', scholarships.length);
+            }
+            // items.item이 있는 경우
+            else if (data.response.body.items.item) {
+              const items = data.response.body.items.item;
+              scholarships = Array.isArray(items) ? items : [items];
+              console.log('items.item:', scholarships.length);
+            }
+            // items가 객체인 경우
+            else {
+              console.log('items가 이상한 구조:', data.response.body.items);
+            }
+          } else {
+            console.log('items 없음!');
+          }
+        } else {
+          console.log('body 없음!');
+        }
+        
+        // header 확인
+        if (data.response.header) {
+          console.log('API 응답 코드:', data.response.header.resultCode);
+          console.log('API 응답 메시지:', data.response.header.resultMsg);
+        }
+      } 
+      // response 객체가 없는 경우
+      else if (Array.isArray(data)) {
+        scholarships = data;
+        totalCount = data.length;
+        console.log('data가 바로 배열:', scholarships.length);
+      }
+      else {
+        console.log('알 수 없는 응답 구조:', Object.keys(data));
+      }
     }
 
+    console.log(`장학금 데이터 파싱 완료: ${scholarships.length}개`);
+    
     return {
-      scholarships: [],
-      totalCount: 0
+      scholarships,
+      totalCount
     };
+
   } catch (error) {
     console.error('장학금 API 호출 오류:', error);
     return {
