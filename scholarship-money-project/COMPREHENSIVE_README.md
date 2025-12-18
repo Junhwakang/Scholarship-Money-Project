@@ -1279,7 +1279,7 @@ Copyright (c) 2025 Alba Scholarship
 
 ---
 
-**최종 업데이트**: 2025년 12월  
+**최종 업데이트**: 2025년 1월  
 **버전**: 1.0.0  
 **작성자**: Alba Scholarship Team
 

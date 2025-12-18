@@ -1,10 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { DollarSign, ArrowRight, MapPin, GraduationCap } from "lucide-react";
-import { Scholarship } from "@/types/scholarship";
-import { fetchScholarships, formatAmount } from "@/lib/scholarship";
+import { DollarSign, ArrowRight, Building2, GraduationCap } from "lucide-react";
+import { collection, getDocs, limit, query } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import Link from "next/link";
+
+interface Scholarship {
+  id: string;
+  name: string;
+  organization: string;
+  amount: string;
+  requirements: string[];
+  applicationMethod: string;
+  website: string;
+  deadline: string;
+  summary: string;
+}
 
 export default function ScholarshipGrid() {
   const [scholarships, setScholarships] = useState<Scholarship[]>([]);
@@ -16,13 +28,19 @@ export default function ScholarshipGrid() {
 
   const loadScholarships = async () => {
     try {
-      console.log('장학금 정보 로딩 시작...');
-      const { scholarships: data } = await fetchScholarships({
-        numOfRows: 6,
+      const scholarshipsRef = collection(db, "scholarships");
+      const q = query(scholarshipsRef, limit(6));
+      const querySnapshot = await getDocs(q);
+      
+      const scholarshipsData: Scholarship[] = [];
+      querySnapshot.forEach((doc) => {
+        scholarshipsData.push({
+          id: doc.id,
+          ...doc.data()
+        } as Scholarship);
       });
-
-      console.log('받은 장학금 데이터:', data.length, '개');
-      setScholarships(data.slice(0, 6));
+      
+      setScholarships(scholarshipsData);
     } catch (error) {
       console.error("장학금 로딩 오류:", error);
     } finally {
@@ -59,47 +77,47 @@ export default function ScholarshipGrid() {
 
         {scholarships.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {scholarships.map((scholarship, index) => (
+            {scholarships.map((scholarship) => (
               <Link
-                key={index}
+                key={scholarship.id}
                 href="/scholarship"
                 className="bg-white p-8 hover:shadow-xl transition-shadow cursor-pointer border border-gray-100"
               >
                 <div className="text-gray-400 text-xs tracking-[0.2em] mb-4 truncate">
-                  {scholarship.instt_nm || scholarship.CTPV_NM || '재단'}
+                  {scholarship.organization || "재단"}
                 </div>
                 
                 <h4 className="text-lg font-light text-gray-900 mb-4 line-clamp-2 min-h-[56px]">
-                  {scholarship.UNIV_NM}
+                  {scholarship.name || "장학금"}
                 </h4>
 
-                {scholarship.SCHLSHIP_TYPE_SE_NM && (
+                {scholarship.summary && (
                   <div className="mb-4">
                     <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                      {scholarship.SCHLSHIP_TYPE_SE_NM}
+                      {scholarship.summary.length > 20 ? scholarship.summary.substring(0, 20) + "..." : scholarship.summary}
                     </span>
                   </div>
                 )}
                 
                 <div className="space-y-3 mb-6">
-                  {scholarship.SCHLSHIP && (
-                    <div className="flex items-center gap-3 text-sm text-gray-600">
-                      <DollarSign className="w-4 h-4 text-gray-400" />
-                      <span className="font-semibold text-gray-900">{formatAmount(scholarship.SCHLSHIP)}</span>
-                    </div>
-                  )}
-                  {scholarship.CTPV_NM && (
-                    <div className="flex items-center gap-3 text-sm text-gray-600">
-                      <MapPin className="w-4 h-4 text-gray-400" />
-                      <span>{scholarship.CTPV_NM}</span>
-                    </div>
-                  )}
-                  {scholarship.UNIV_SE_NM && (
-                    <div className="flex items-center gap-3 text-sm text-gray-600">
-                      <GraduationCap className="w-4 h-4 text-gray-400" />
-                      <span>{scholarship.UNIV_SE_NM}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-3 text-sm text-gray-600">
+                    <DollarSign className="w-4 h-4 text-gray-400" />
+                    <span className="font-semibold text-gray-900">
+                      {scholarship.amount && scholarship.amount.length > 20 ? scholarship.amount.substring(0, 20) + "..." : scholarship.amount || "별도문의"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-gray-600">
+                    <Building2 className="w-4 h-4 text-gray-400" />
+                    <span>{scholarship.organization || "재단"}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-gray-600">
+                    <GraduationCap className="w-4 h-4 text-gray-400" />
+                    <span>
+                      {scholarship.applicationMethod && scholarship.applicationMethod.length > 15 
+                        ? scholarship.applicationMethod.substring(0, 15) + "..." 
+                        : scholarship.applicationMethod || "홈페이지"}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-gray-100">
@@ -116,6 +134,13 @@ export default function ScholarshipGrid() {
             장학금 정보를 불러올 수 없습니다.
           </div>
         )}
+
+        <div className="mt-8 text-center md:hidden">
+          <Link href="/scholarship" className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+            <span>전체 보기</span>
+            <ArrowRight className="w-5 h-5" />
+          </Link>
+        </div>
       </div>
     </div>
   );

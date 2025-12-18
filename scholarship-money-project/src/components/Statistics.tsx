@@ -1,20 +1,24 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
 export default function StatisticsSection() {
-  const stats = [
+  const [stats, setStats] = useState([
     {
       label: "설립연도",
-      value: "2020",
+      value: "2025",
       unit: "YEAR",
     },
     {
       label: "등록된 채용",
-      value: "5,000",
+      value: "200+",
       unit: "JOBS",
     },
     {
       label: "장학금 정보",
-      value: "1,200",
+      value: "100+",
       unit: "PROGRAMS",
     },
     {
@@ -22,7 +26,49 @@ export default function StatisticsSection() {
       value: "4.8",
       unit: "RATING",
     }
-  ];
+  ]);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      // 채용 정보 개수
+      const jobsSnapshot = await getDocs(collection(db, "jobs"));
+      const jobsCount = jobsSnapshot.size;
+
+      // 장학금 정보 개수
+      const scholarshipsSnapshot = await getDocs(collection(db, "scholarships"));
+      const scholarshipsCount = scholarshipsSnapshot.size;
+
+      setStats([
+        {
+          label: "설립연도",
+          value: "2025",
+          unit: "YEAR",
+        },
+        {
+          label: "등록된 채용",
+          value: jobsCount > 0 ? jobsCount.toLocaleString() : "200+",
+          unit: "JOBS",
+        },
+        {
+          label: "장학금 정보",
+          value: scholarshipsCount > 0 ? scholarshipsCount.toLocaleString() : "100+",
+          unit: "PROGRAMS",
+        },
+        {
+          label: "평균 평점",
+          value: "4.8",
+          unit: "RATING",
+        }
+      ]);
+    } catch (error) {
+      console.error("통계 로드 실패:", error);
+      // 에러 발생 시 기본값 유지
+    }
+  };
 
   return (
     <div className="bg-neutral-50 py-20">

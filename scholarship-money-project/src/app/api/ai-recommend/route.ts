@@ -5,6 +5,35 @@ import { collection, getDocs } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
 
+// 재시도 함수
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 2000
+): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      const isLastRetry = i === maxRetries - 1;
+      const isRateLimitError = error.message?.includes('503') || 
+                               error.message?.includes('overloaded') ||
+                               error.message?.includes('UNAVAILABLE') ||
+                               error.message?.includes('429');
+      
+      if (isLastRetry || !isRateLimitError) {
+        throw error;
+      }
+      
+      const delay = baseDelay * Math.pow(2, i);
+      console.log(`⏳ 재시도 ${i + 1}/${maxRetries} (${delay}ms 대기 중...)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw new Error('Max retries reached');
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -12,9 +41,20 @@ export async function POST(request: NextRequest) {
 
     console.log('=== AI 맞춤 추천 시작 ===');
     console.log('Type:', type);
-    console.log('UserInfo:', userInfo);
 
-    // 1. Firestore에서 모든 데이터 가져오기
+    // 1. API 키 확인
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error('❌ GEMINI_API_KEY 환경변수가 설정되지 않았습니다.');
+      return NextResponse.json({
+        success: false,
+        error: 'AI 서비스 설정에 문제가 있습니다.'
+      }, { status: 502 });
+    }
+
+    console.log('✅ API 키 존재 확인');
+
+    // 2. Firestore에서 데이터 가져오기
     let allItems: any[] = [];
     
     if (type === 'scholarship') {
@@ -32,26 +72,22 @@ export async function POST(request: NextRequest) {
     if (allItems.length === 0) {
       return NextResponse.json({
         success: false,
-        error: 'Firestore에 데이터가 없습니다. 먼저 크롤링을 실행하세요.'
+        error: 'Firestore에 데이터가 없습니다.'
       }, { status: 404 });
     }
 
-    // 2. 현재 날짜 기준 유효한 것만 필터링
+    // 3. 유효한 항목 필터링
     const today = new Date();
     const validItems = allItems.filter(item => {
       if (!item.deadline) return true;
-      
-      // "상시" 등은 통과
       if (item.deadline === '상시' || item.deadline === '상시모집' || item.deadline === '상시채용') {
         return true;
       }
-      
-      // 날짜 파싱
       const deadlineDate = new Date(item.deadline);
       return deadlineDate >= today;
     });
 
-    console.log(`✅ 유효한 항목: ${validItems.length}개 (날짜 지난 것 제외)`);
+    console.log(`✅ 유효한 항목: ${validItems.length}개`);
 
     if (validItems.length === 0) {
       return NextResponse.json({
@@ -60,10 +96,7 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
-    // 3. Gemini API로 사용자 맞춤 추천
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error('Gemini API 키 없음');
-
+    // 4. Gemini SDK 초기화 (공식 문서 방식)
     const ai = new GoogleGenAI({ apiKey });
 
     let prompt = '';
@@ -80,13 +113,7 @@ export async function POST(request: NextRequest) {
 - 지역: ${userInfo.region}
 
 **사용 가능한 장학금 목록:**
-${JSON.stringify(validItems, null, 2)}
-
-**추천 기준:**
-1. 소득분위가 학생의 소득분위보다 높거나 같은 것
-2. 학점 요구사항이 학생 학점보다 낮거나 같은 것
-3. 지역, 전공, 학년 조건 부합하는 것
-4. 학생에게 가장 유리한 순서로 정렬
+${JSON.stringify(validItems.slice(0, 10), null, 2)}
 
 **출력 형식 (JSON):**
 {
@@ -96,8 +123,7 @@ ${JSON.stringify(validItems, null, 2)}
   ]
 }
 
-반드시 위 목록에 있는 장학금만 사용하고, 새로운 장학금을 만들지 마세요.
-JSON 형식으로만 답변하세요.`;
+반드시 JSON 형식으로만 답변하세요.`;
 
     } else {
       prompt = `당신은 채용 추천 전문가입니다. 아래 구직자에게 가장 적합한 채용 공고를 추천하세요.
@@ -111,13 +137,7 @@ JSON 형식으로만 답변하세요.`;
 - 지역: ${userInfo.region}
 
 **사용 가능한 채용 공고 목록:**
-${JSON.stringify(validItems, null, 2)}
-
-**추천 기준:**
-1. 희망 직무와 일치하는 것
-2. 필수 요건이 구직자 경력/학력과 부합하는 것
-3. 우대 요건 중 구직자가 가진 기술과 매칭되는 것
-4. 구직자에게 가장 적합한 순서로 정렬
+${JSON.stringify(validItems.slice(0, 10), null, 2)}
 
 **출력 형식 (JSON):**
 {
@@ -127,25 +147,29 @@ ${JSON.stringify(validItems, null, 2)}
   ]
 }
 
-반드시 위 목록에 있는 채용 공고만 사용하고, 새로운 공고를 만들지 마세요.
-JSON 형식으로만 답변하세요.`;
+반드시 JSON 형식으로만 답변하세요.`;
     }
 
     console.log('🚀 Gemini API 호출 중...');
 
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        temperature: 0.3,
-        maxOutputTokens: 4000,
-      }
-    });
+    // 5. SDK 방식으로 호출 (공식 문서 방식 - 2024 버전)
+    const response = await retryWithBackoff(async () => {
+      return await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          temperature: 0.3,
+          maxOutputTokens: 4000,
+        }
+      });
+    }, 3, 2000);
 
-    const text: string = result.text || '';
-    if (!text) throw new Error('빈 응답');
+    // 새 SDK의 응답 구조
+    const text: string = response.text || '';
+    if (!text) throw new Error('AI 모델이 빈 응답을 반환했습니다.');
 
     console.log('📝 Gemini 응답 길이:', text.length);
+    console.log('📝 응답 미리보기:', text.substring(0, 200));
 
     // JSON 추출
     let jsonText = text.trim();
@@ -167,9 +191,6 @@ JSON 형식으로만 답변하세요.`;
       console.log(`✅ ${itemCount}개 추천 완료`);
     } catch (parseError) {
       console.error('❌ JSON 파싱 실패:', parseError);
-      console.error('원본 텍스트:', text);
-      
-      // 파싱 실패시 빈 배열
       parsedData = type === 'scholarship' 
         ? { scholarships: [] } 
         : { jobs: [] };
@@ -181,11 +202,49 @@ JSON 형식으로만 답변하세요.`;
     });
 
   } catch (error: any) {
-    console.error('❌ 에러:', error.message);
+    console.error('========================================');
+    console.error('❌ AI 추천 에러 발생');
+    console.error('에러 메시지:', error.message);
+    console.error('에러 타입:', error.constructor.name);
+    console.error('에러 스택:', error.stack);
+    console.error('========================================');
+    
+    let errorMessage = '알 수 없는 오류가 발생했습니다.';
+    let statusCode = 500;
+    
+    // 더 구체적인 에러 파싱
+    if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')) {
+      errorMessage = 'AI 서비스 사용량이 초과되었습니다. 잠시 후(1-2분) 다시 시도해주세요.';
+      statusCode = 503;
+    } else if (error.message?.includes('503') || error.message?.includes('overloaded') || error.message?.includes('UNAVAILABLE')) {
+      errorMessage = 'AI 서버가 현재 과부하 상태입니다. 잠시 후 다시 시도해주세요.';
+      statusCode = 503;
+    } else if (error.message?.includes('404') || error.message?.includes('not found')) {
+      errorMessage = 'AI 모델을 찾을 수 없습니다.';
+      statusCode = 502;
+      console.error('🔴 404 에러 - 모델명 확인 필요: gemini-2.5-flash');
+    } else if (error.message?.includes('API 키')) {
+      errorMessage = 'AI 서비스 설정에 문제가 있습니다.';
+      statusCode = 502;
+    } else if (error.message?.includes('Firestore')) {
+      errorMessage = '데이터베이스 연결에 실패했습니다.';
+      statusCode = 503;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
     
     return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
+      { 
+        success: false, 
+        error: errorMessage,
+        // 개발 환경에서는 상세 에러 표시
+        debugInfo: process.env.NODE_ENV === 'development' ? {
+          message: error.message,
+          stack: error.stack?.split('\n').slice(0, 3).join('\n'),
+          apiKeyExists: !!process.env.GEMINI_API_KEY,
+        } : undefined
+      },
+      { status: statusCode }
     );
   }
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export default function Footer() {
   return (
     <footer className="bg-neutral-900 text-gray-400 py-16 border-t border-neutral-800">
@@ -21,20 +23,22 @@ export default function Footer() {
 
           {/* 링크 섹션 1 */}
           <div className="md:col-span-2">
-            <div className="text-sm text-white font-light mb-4">채용</div>
+            <div className="text-sm text-white font-light mb-4">서비스</div>
             <ul className="space-y-3 text-sm">
-              <li><a href="#convenience" className="hover:text-white transition-colors">공기관</a></li>
+              <li><Link href="/jobs" className="hover:text-white transition-colors">채용 정보</Link></li>
+              <li><Link href="/scholarship" className="hover:text-white transition-colors">장학금</Link></li>
+              <li><Link href="/wage-violation" className="hover:text-white transition-colors">임금체불 명단</Link></li>
+              <li><Link href="/reviews" className="hover:text-white transition-colors">후기</Link></li>
             </ul>
           </div>
 
           {/* 링크 섹션 2 */}
           <div className="md:col-span-2">
-            <div className="text-sm text-white font-light mb-4">장학금</div>
+            <div className="text-sm text-white font-light mb-4">회사 소개</div>
             <ul className="space-y-3 text-sm">
-              <li><a href="#national" className="hover:text-white transition-colors">국가장학금</a></li>
-              <li><a href="#corporate" className="hover:text-white transition-colors">기업장학금</a></li>
-              <li><a href="#university" className="hover:text-white transition-colors">교내장학금</a></li>
-              <li><a href="#local" className="hover:text-white transition-colors">지방자치단체</a></li>
+              <li><Link href="/about" className="hover:text-white transition-colors">서비스 소개</Link></li>
+              <li><Link href="/terms" className="hover:text-white transition-colors">이용약관</Link></li>
+              <li><Link href="/privacy" className="hover:text-white transition-colors">개인정보처리방침</Link></li>
             </ul>
           </div>
 
@@ -42,10 +46,8 @@ export default function Footer() {
           <div className="md:col-span-3">
             <div className="text-sm text-white font-light mb-4">고객센터</div>
             <ul className="space-y-3 text-sm">
-              <li><a href="#faq" className="hover:text-white transition-colors">자주 묻는 질문</a></li>
-              <li><a href="#contact" className="hover:text-white transition-colors">문의하기</a></li>
-              <li><a href="#terms" className="hover:text-white transition-colors">이용약관</a></li>
-              <li><a href="#privacy" className="hover:text-white transition-colors">개인정보처리방침</a></li>
+              <li><Link href="/faq" className="hover:text-white transition-colors">자주 묻는 질문</Link></li>
+              <li><Link href="/contact" className="hover:text-white transition-colors">문의하기</Link></li>
             </ul>
           </div>
         </div>

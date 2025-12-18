@@ -31,6 +31,20 @@ export interface UserProfile {
   hasAdditionalInfo: boolean;
   scholarshipInfo?: ScholarshipInfo;
   jobInfo?: JobInfo;
+  // 새로 추가된 필드
+  interestTags?: string[];
+  exclusions?: {
+    nightShift?: boolean;
+    weekend?: boolean;
+    farLocation?: boolean;
+    lowSalary?: boolean;
+  };
+  notifications?: {
+    deadlineAlert?: boolean;
+    newJobAlert?: boolean;
+    scholarshipAlert?: boolean;
+    wageViolationAlert?: boolean;
+  };
 }
 
 export interface ScholarshipInfo {

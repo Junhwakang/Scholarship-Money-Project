@@ -1,10 +1,10 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import Providers from '@/components/Providers';
+import Providers from "@/components/Providers";
 
 export const metadata: Metadata = {
-  title: "Alba Scholarship - 모든 기회의 시작",
-  description: "대한민국의 모든 채용 정보와 장학금 정보를 한 곳에서 확인하세요.",
+  title: "알장딱! - 알바에 장학금을 더하다",
+  description: "대한민국의 모든 알바 정보와 장학금 정보를 한 곳에서 확인하세요.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

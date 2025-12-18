@@ -3,96 +3,129 @@
 import { useState, useEffect } from "react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
-import { Search, MapPin, DollarSign, GraduationCap, Filter, X, Building2 } from "lucide-react";
-import { Scholarship } from "@/types/scholarship";
-import { fetchScholarships, formatAmount, regions, universityTypes, scholarshipTypes } from "@/lib/scholarship";
+import { Search, Building2, GraduationCap, ChevronLeft, ChevronRight, Filter, X } from "lucide-react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+interface Scholarship {
+  id: string;
+  name: string;
+  organization: string;
+  amount: string;
+  requirements: string[];
+  applicationMethod: string;
+  website: string;
+  deadline: string;
+  summary: string;
+}
+
+const ITEMS_PER_PAGE = 20;
 
 export default function ScholarshipPage() {
   const [scholarships, setScholarships] = useState<Scholarship[]>([]);
+  const [filteredScholarships, setFilteredScholarships] = useState<Scholarship[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [selectedOrganization, setSelectedOrganization] = useState("");
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const [showFilters, setShowFilters] = useState(false);
-  
-  // 필터 상태
-  const [filterRegion, setFilterRegion] = useState("");
-  const [filterUnivType, setFilterUnivType] = useState("");
-  const [filterScholarshipType, setFilterScholarshipType] = useState("");
 
-  // 데이터 가져오기
-  const loadScholarships = async () => {
-    setLoading(true);
-    setError("");
-    
-    try {
-      console.log("=== 장학금 정보 로딩 시작 ===");
-      console.log("페이지:", currentPage);
-      console.log("검색어:", searchKeyword);
-      console.log("필터:", { filterRegion, filterUnivType, filterScholarshipType });
-      
-      const params: any = {
-        pageNo: currentPage,
-        numOfRows: 20,
-      };
-
-      if (searchKeyword) params.UNIV_NM = searchKeyword;
-      if (filterRegion) params.CTPV_NM = filterRegion;
-      if (filterUnivType) params.UNIV_SE_NM = filterUnivType;
-      if (filterScholarshipType) params.SCHLSHIP_TYPE_SE_NM = filterScholarshipType;
-
-      const { scholarships: data, totalCount: count } = await fetchScholarships(params);
-      
-      console.log("받은 데이터:", data.length, "개");
-      console.log("총 개수:", count);
-      
-      if (data.length === 0) {
-        setError("검색 결과가 없습니다. 다른 검색 조건을 시도해보세요.");
-      }
-
-      // 최신순 정렬 (CRTR_YMD 기준 내림차순)
-      const sortedData = data.sort((a, b) => {
-        return (b.CRTR_YMD || '').localeCompare(a.CRTR_YMD || '');
-      });
-      
-      setScholarships(sortedData);
-      setTotalCount(count);
-    } catch (err: any) {
-      console.error("데이터 로딩 오류:", err);
-      setError(err.message || "데이터를 불러오는 중 오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 초기 로드
+  // Firebase에서 장학금 정보 가져오기
   useEffect(() => {
-    loadScholarships();
-  }, [currentPage]);
+    const fetchScholarships = async () => {
+      try {
+        setLoading(true);
+        const scholarshipsRef = collection(db, "scholarships");
+        const querySnapshot = await getDocs(scholarshipsRef);
+        
+        const scholarshipsData: Scholarship[] = [];
+        querySnapshot.forEach((doc) => {
+          scholarshipsData.push({
+            id: doc.id,
+            ...doc.data()
+          } as Scholarship);
+        });
+        
+        setScholarships(scholarshipsData);
+        setFilteredScholarships(scholarshipsData);
+      } catch (error) {
+        console.error("장학금 정보 로딩 오류:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // 검색 핸들러
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("검색 실행:", searchKeyword);
+    fetchScholarships();
+  }, []);
+
+  // 조직 목록 추출
+  const organizations = Array.from(new Set(scholarships.map(s => s.organization))).sort();
+
+  // 필터링
+  useEffect(() => {
+    let filtered = scholarships;
+
+    if (searchKeyword) {
+      filtered = filtered.filter(scholarship =>
+        (scholarship.name && scholarship.name.toLowerCase().includes(searchKeyword.toLowerCase())) ||
+        (scholarship.organization && scholarship.organization.toLowerCase().includes(searchKeyword.toLowerCase())) ||
+        (scholarship.summary && scholarship.summary.toLowerCase().includes(searchKeyword.toLowerCase()))
+      );
+    }
+
+    if (selectedOrganization) {
+      filtered = filtered.filter(s => s.organization === selectedOrganization);
+    }
+
+    setFilteredScholarships(filtered);
     setCurrentPage(1);
-    loadScholarships();
-  };
+  }, [searchKeyword, selectedOrganization, scholarships]);
 
   // 필터 초기화
   const resetFilters = () => {
-    setFilterRegion("");
-    setFilterUnivType("");
-    setFilterScholarshipType("");
     setSearchKeyword("");
-    setCurrentPage(1);
-    loadScholarships();
+    setSelectedOrganization("");
   };
 
-  // 날짜 포맷팅
-  const formatDate = (dateStr: string) => {
-    if (!dateStr || dateStr.length !== 8) return dateStr;
-    return `${dateStr.substring(0, 4)}.${dateStr.substring(4, 6)}.${dateStr.substring(6, 8)}`;
+  // 페이지네이션 계산
+  const totalPages = Math.ceil(filteredScholarships.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentScholarships = filteredScholarships.slice(startIndex, endIndex);
+
+  // 페이지 변경
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // 페이지 번호 생성
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    
+    if (end - start < maxVisible - 1) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+    
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    
+    return pages;
+  };
+
+  // 날짜 포맷 함수
+  const formatDate = (dateString: string) => {
+    if (!dateString || dateString === "상시" || dateString === "상시채용") return dateString;
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    return `${date.getMonth() + 1}/${date.getDate()}`;
   };
 
   return (
@@ -100,13 +133,13 @@ export default function ScholarshipPage() {
       <Navigation />
       
       {/* 헤더 */}
-      <div className="pt-24 pb-12 bg-gradient-to-b from-gray-50 to-white">
+      <div className="pt-24 pb-12 bg-gradient-to-b from-blue-50 to-white">
         <div className="max-w-7xl mx-auto px-6 lg:px-12">
           <h1 className="text-4xl md:text-5xl font-light text-gray-900 mb-4 tracking-tight">
             장학금 정보
           </h1>
           <p className="text-gray-600 text-lg">
-            전국 대학별 장학금 정보를 확인하세요
+            총 <span className="font-semibold text-gray-900">{filteredScholarships.length}</span>개의 장학금
           </p>
         </div>
       </div>
@@ -114,240 +147,188 @@ export default function ScholarshipPage() {
       <div className="max-w-7xl mx-auto px-6 lg:px-12 py-8">
         {/* 검색 및 필터 영역 */}
         <div className="bg-white border border-gray-200 rounded-lg p-6 mb-8">
-          <form onSubmit={handleSearch} className="space-y-4">
-            {/* 검색바 */}
-            <div className="flex gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  value={searchKeyword}
-                  onChange={(e) => setSearchKeyword(e.target.value)}
-                  placeholder="대학교명 검색 (예: 부산대학교, 서울대학교)"
-                  className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowFilters(!showFilters)}
-                className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-              >
-                <Filter className="w-5 h-5" />
-                <span>필터</span>
-              </button>
-              <button
-                type="submit"
-                className="px-8 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium"
-              >
-                검색
-              </button>
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* 검색 */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                placeholder="장학금명, 기관명 검색"
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+              />
             </div>
 
-            {/* 필터 영역 */}
-            {showFilters && (
-              <div className="border-t border-gray-200 pt-4 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* 지역 필터 */}
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-2">시도</label>
-                    <select
-                      value={filterRegion}
-                      onChange={(e) => setFilterRegion(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
-                    >
-                      {regions.map(region => (
-                        <option key={region.value} value={region.value}>
-                          {region.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* 대학구분 필터 */}
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-2">대학구분</label>
-                    <select
-                      value={filterUnivType}
-                      onChange={(e) => setFilterUnivType(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
-                    >
-                      {universityTypes.map(type => (
-                        <option key={type.value} value={type.value}>
-                          {type.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* 장학금유형 필터 */}
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-2">장학금유형</label>
-                    <select
-                      value={filterScholarshipType}
-                      onChange={(e) => setFilterScholarshipType(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
-                    >
-                      {scholarshipTypes.map(type => (
-                        <option key={type.value} value={type.value}>
-                          {type.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={resetFilters}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors flex items-center gap-2"
-                  >
-                    <X className="w-4 h-4" />
-                    필터 초기화
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCurrentPage(1);
-                      loadScholarships();
-                    }}
-                    className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
-                  >
-                    필터 적용
-                  </button>
-                </div>
-              </div>
-            )}
-          </form>
-        </div>
-
-        {/* 에러 메시지 */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-800">{error}</p>
+            {/* 필터 버튼 */}
+            <button
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className="md:w-auto px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+            >
+              <Filter className="w-5 h-5" />
+              <span>필터</span>
+              {(selectedOrganization) && (
+                <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full">1</span>
+              )}
+            </button>
           </div>
-        )}
+
+          {/* 필터 패널 */}
+          {showFilterPanel && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900">필터 옵션</h3>
+                <button
+                  onClick={resetFilters}
+                  className="text-sm text-blue-600 hover:text-blue-700"
+                >
+                  초기화
+                </button>
+              </div>
+
+              {/* 기관 필터 */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  기관명
+                </label>
+                <select
+                  value={selectedOrganization}
+                  onChange={(e) => setSelectedOrganization(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  <option value="">전체</option>
+                  {organizations.map((org) => (
+                    <option key={org} value={org}>
+                      {org}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 적용된 필터 태그 */}
+              {selectedOrganization && (
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                    <span>{selectedOrganization}</span>
+                    <button
+                      onClick={() => setSelectedOrganization("")}
+                      className="hover:text-blue-900"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* 로딩 */}
         {loading && (
           <div className="text-center py-20">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-            <p className="mt-4 text-gray-600">데이터를 불러오는 중...</p>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
         )}
 
-        {/* 결과 */}
-        {!loading && !error && scholarships.length > 0 && (
+        {/* 결과 없음 */}
+        {!loading && filteredScholarships.length === 0 && (
+          <div className="text-center py-20">
+            <GraduationCap className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500 text-lg">검색 결과가 없습니다.</p>
+            <button
+              onClick={resetFilters}
+              className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              필터 초기화
+            </button>
+          </div>
+        )}
+
+        {/* 장학금 리스트 */}
+        {!loading && currentScholarships.length > 0 && (
           <>
-            <div className="mb-6">
-              <p className="text-gray-600">
-                총 <span className="font-semibold text-gray-900">{totalCount}</span>개의 장학금 정보
-                <span className="text-sm text-gray-500 ml-2">(최신순)</span>
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              {scholarships.map((scholarship, index) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {currentScholarships.map((scholarship) => (
                 <div
-                  key={`${scholarship.UNIV_NM}-${scholarship.instt_code}-${index}`}
-                  className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-all"
+                  key={scholarship.id}
+                  className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow"
                 >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="text-xl font-light text-gray-900 mb-2">
-                        {scholarship.UNIV_NM}
-                      </h3>
-                      {scholarship.instt_nm && (
-                        <p className="text-gray-600 mb-2 font-medium">{scholarship.instt_nm}</p>
-                      )}
-                    </div>
-                    <div className="ml-4 flex flex-col gap-2 items-end">
-                      {scholarship.SCHLSHIP && (
-                        <div className="px-4 py-2 bg-green-100 text-green-800 rounded-lg font-bold text-lg">
-                          {formatAmount(scholarship.SCHLSHIP)}
-                        </div>
-                      )}
-                      {scholarship.SCHLSHIP_TYPE_SE_NM && (
-                        <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs rounded-full whitespace-nowrap">
-                          {scholarship.SCHLSHIP_TYPE_SE_NM}
-                        </span>
-                      )}
-                    </div>
+                  {/* 기관명 */}
+                  <div className="flex items-center gap-2 text-sm text-blue-600 mb-3">
+                    <Building2 className="w-4 h-4" />
+                    <span>{scholarship.organization}</span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-4">
-                    {scholarship.CTPV_NM && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <MapPin className="w-4 h-4" />
-                        <span>{scholarship.CTPV_NM}</span>
-                      </div>
-                    )}
-                    {scholarship.UNIV_SE_NM && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <GraduationCap className="w-4 h-4" />
-                        <span>{scholarship.UNIV_SE_NM}</span>
-                      </div>
-                    )}
-                    {scholarship.SCHLJO_SE_NM && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Building2 className="w-4 h-4" />
-                        <span>{scholarship.SCHLJO_SE_NM}</span>
-                      </div>
-                    )}
-                    {scholarship.CRTR_YR && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <DollarSign className="w-4 h-4" />
-                        <span>{scholarship.CRTR_YR}년 기준</span>
-                      </div>
-                    )}
+                  {/* 장학금명 */}
+                  <h3 className="font-semibold text-gray-900 mb-3 line-clamp-2 min-h-[48px]">
+                    {scholarship.name}
+                  </h3>
+
+                  {/* 요약 */}
+                  <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                    {scholarship.summary}
+                  </p>
+
+                  {/* 지원 금액 */}
+                  <div className="bg-blue-50 rounded-lg p-3 mb-4">
+                    <div className="text-xs text-gray-600 mb-1">지원 금액</div>
+                    <div className="font-semibold text-blue-600">{scholarship.amount}</div>
                   </div>
 
-                  {scholarship.CRTR_YMD && (
-                    <div className="text-sm text-gray-500">
-                      데이터 기준일: {formatDate(scholarship.CRTR_YMD)}
-                    </div>
-                  )}
+                  {/* 마감일 */}
+                  <div className="flex items-center justify-between text-sm mb-4">
+                    <span className="text-gray-600">마감일</span>
+                    <span className="font-medium text-gray-900">{formatDate(scholarship.deadline)}</span>
+                  </div>
+
+                  {/* 버튼 */}
+                  <a
+                    href={scholarship.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full py-2 bg-gray-900 text-white text-center rounded-lg hover:bg-gray-800 transition-colors"
+                  >
+                    지원하기
+                  </a>
                 </div>
               ))}
             </div>
 
             {/* 페이지네이션 */}
-            <div className="mt-8 flex justify-center items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                이전
-              </button>
-              
-              <span className="px-4 py-2 text-gray-600">
-                {currentPage} 페이지
-              </span>
+            {totalPages > 1 && (
+              <div className="mt-12 flex justify-center items-center gap-2">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
 
-              <button
-                onClick={() => setCurrentPage(prev => prev + 1)}
-                disabled={currentPage >= Math.ceil(totalCount / 20)}
-                className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                다음
-              </button>
-            </div>
+                {getPageNumbers().map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => goToPage(page)}
+                    className={`px-4 py-2 rounded-lg ${
+                      currentPage === page
+                        ? "bg-blue-600 text-white"
+                        : "hover:bg-gray-100 text-gray-700"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            )}
           </>
-        )}
-
-        {/* 결과 없음 */}
-        {!loading && !error && scholarships.length === 0 && (
-          <div className="text-center py-20">
-            <p className="text-gray-600 text-lg">검색 결과가 없습니다.</p>
-            <p className="text-gray-500 mt-2">다른 검색어나 필터를 사용해보세요.</p>
-            <button
-              onClick={resetFilters}
-              className="mt-4 px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
-            >
-              검색 초기화
-            </button>
-          </div>
         )}
       </div>
 
